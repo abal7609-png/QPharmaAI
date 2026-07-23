@@ -11,19 +11,18 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Unzip project
         run: |
           unzip -o QPharmaAI_Project-1.zip -d extracted_project
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v3
+        uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
 
-      # في حال كان المشروع Flutter
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -39,7 +38,6 @@ jobs:
           fi
         continue-on-error: true
 
-      # في حال كان المشروع Android (Gradle) عادي
       - name: Build APK (Gradle)
         run: |
           cd extracted_project
@@ -50,7 +48,8 @@ jobs:
         continue-on-error: true
 
       - name: Upload APK
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: app-release
-          path: extracted_project/**/build/app/outputs/flutter-apk/*.apk
+          path: extracted_project/**/*.apk
+          
