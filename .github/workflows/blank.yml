@@ -1,4 +1,4 @@
-name: Build APK from ZIP
+name: Build Android APK
 
 on:
   push:
@@ -13,12 +13,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Unzip project automatically
+      - name: Unzip project
         run: |
           mkdir -p extracted_project
-          # البحث عن أي ملف مضغوط وفك ضغطه تلقائياً
           ZIP_FILE=$(ls *.zip | head -n 1)
-          echo "Found zip file: $ZIP_FILE"
           unzip -o "$ZIP_FILE" -d extracted_project
 
       - name: Set up JDK 17
@@ -27,24 +25,103 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Set up Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.x'
-
-      - name: Build Flutter APK
+      - name: Setup Gradle Project Structure
         run: |
-          # البحث عن المجلد الذي يحتوي على pubspec.yaml والتنقل إليه
-          PROJECT_DIR=$(find extracted_project -name "pubspec.yaml" -exec dirname {} \;)
-          echo "Project directory: $PROJECT_DIR"
-          cd "$PROJECT_DIR"
-          flutter pub get
-          flutter build apk --release
+          cd extracted_project
+          
+          # إنشائ ملف build.gradle الرئيسي إذا لم يكن موجوداً
+          if [ ! -f "build.gradle" ] && [ ! -f "build.gradle.kts" ]; then
+            cat << 'EOF' > build.gradle
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.1.1'
+        classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:1.8.10'
+    }
+}
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+EOF
+          fi
 
-      - name: Upload APK
+          # إنشاء ملف settings.gradle
+          if [ ! -f "settings.gradle" ] && [ ! -f "settings.gradle.kts" ]; then
+            echo "include ':app'" > settings.gradle
+          fi
+
+          # إنشاء ملف app/build.gradle المفقود
+          if [ ! -f "app/build.gradle" ] && [ ! -f "app/build.gradle.kts" ]; then
+            cat << 'EOF' > app/build.gradle
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+}
+
+android {
+    namespace 'com.qpharma.ai'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.qpharma.ai"
+        minSdk 24
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+    buildFeatures {
+        compose true
+    }
+    composeOptions {
+        kotlinCompilerExtensionVersion '1.5.1'
+    }
+}
+
+dependencies {
+    implementation 'androidx.core:core-ktx:1.12.0'
+    implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.7.0'
+    implementation 'androidx.activity:activity-compose:1.8.2'
+    implementation platform('androidx.compose:compose-bom:2023.08.00')
+    implementation 'androidx.compose.ui:ui'
+    implementation 'androidx.compose.ui:ui-graphics'
+    implementation 'androidx.compose.ui:ui-tooling-preview'
+    implementation 'androidx.compose.material3:material3'
+}
+EOF
+          fi
+
+      - name: Setup Gradle Wrapper
+        run: |
+          cd extracted_project
+          gradle wrapper
+
+      - name: Build Debug APK
+        run: |
+          cd extracted_project
+          ./gradlew assembleDebug --no-daemon
+
+      - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app-release
-          path: extracted_project/**/*.apk
-
-      
+          name: QPharma-AI-APK
+          path: extracted_project/app/build/outputs/apk/debug/*.apk
+          
